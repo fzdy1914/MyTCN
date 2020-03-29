@@ -6,7 +6,8 @@ import torch.nn.functional as F
 from torch import optim
 import copy
 import numpy as np
-
+import time
+import json
 
 class MultiStageModel(nn.Module):
     def __init__(self, num_stages, num_layers, num_f_maps, dim, num_classes):
@@ -62,12 +63,23 @@ class Trainer:
     def train(self, save_dir, batch_gen, num_epochs, batch_size, learning_rate, device):
         self.model.train()
         self.model.to(device)
+        self.model.load_state_dict(torch.load(save_dir + "/epoch-20.model"))
+
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        optimizer.load_state_dict(torch.load(save_dir + "/epoch-20.opt"))
+        start_time = time.time()
         for epoch in range(num_epochs):
             epoch_loss = 0
             correct = 0
             total = 0
+            number = 0
+
             while batch_gen.has_next():
+                number += 1
+                if number % 10 == 0:
+                    print(number)
+                    print("--- %s seconds ---" % (time.time() - start_time))
+                    print("loss = %f,   acc = %f" % (epoch_loss / number, float(correct)/total))
                 batch_input, batch_target, mask = batch_gen.next_batch(batch_size)
                 batch_input, batch_target, mask = batch_input.to(device), batch_target.to(device), mask.to(device)
                 optimizer.zero_grad()
@@ -87,22 +99,29 @@ class Trainer:
                 total += torch.sum(mask[:, 0, :]).item()
 
             batch_gen.reset()
-            torch.save(self.model.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".model")
-            torch.save(optimizer.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".opt")
-            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 1, epoch_loss / len(batch_gen.list_of_examples),
+            torch.save(self.model.state_dict(), save_dir + "/epoch-" + str(epoch + 21) + ".model")
+            torch.save(optimizer.state_dict(), save_dir + "/epoch-" + str(epoch + 21) + ".opt")
+            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 21, epoch_loss / len(batch_gen.list_of_examples),
                                                                float(correct)/total))
 
-    def predict(self, model_dir, results_dir, features_path, vid_list_file, epoch, actions_dict, device, sample_rate):
+    def predict(self, model_dir, results_dir, features_path, vid_list_file, epoch, actions_dict, device, sample_rate, segments):
         self.model.eval()
+        ans = []
+        number = -1
         with torch.no_grad():
             self.model.to(device)
             self.model.load_state_dict(torch.load(model_dir + "/epoch-" + str(epoch) + ".model"))
             file_ptr = open(vid_list_file, 'r')
             list_of_vids = file_ptr.read().split('\n')[:-1]
             file_ptr.close()
+
             for vid in list_of_vids:
-                print vid
-                features = np.load(features_path + vid.split('.')[0] + '.npy')
+                number += 1
+                vid = vid.split('/')[-1]
+                print(vid)
+                features = np.loadtxt(features_path + vid.split('.')[0] + '.gz')
+                features = np.transpose(features, (1, 0))
+                #features = np.load(features_path + vid.split('.')[0] + '.npy')
                 features = features[:, ::sample_rate]
                 input_x = torch.tensor(features, dtype=torch.float)
                 input_x.unsqueeze_(0)
@@ -111,10 +130,44 @@ class Trainer:
                 _, predicted = torch.max(predictions[-1].data, 1)
                 predicted = predicted.squeeze()
                 recognition = []
-                for i in range(len(predicted)):
-                    recognition = np.concatenate((recognition, [actions_dict.keys()[actions_dict.values().index(predicted[i].item())]]*sample_rate))
-                f_name = vid.split('/')[-1].split('.')[0]
-                f_ptr = open(results_dir + "/" + f_name, "w")
-                f_ptr.write("### Frame level recognition: ###\n")
-                f_ptr.write(' '.join(recognition))
-                f_ptr.close()
+                #print(predicted)
+                #for i in range(len(predicted)):
+                    #recognition = np.concatenate((recognition, [actions_dict.keys()[actions_dict.values().index(predicted[i].item())]]*sample_rate))
+                    #recognition = np.concatenate((recognition, [
+                        #actions_dict.keys()[actions_dict.values().index(predicted[i].item())]] * sample_rate))
+                #print(recognition)
+                for i in range(len(segments[number]) - 1):
+                    start = int(segments[number][i])
+                    end = int(segments[number][i+1])
+                    segment = {}
+                    for j in range(start, end):
+                        predict = predicted[j].item()
+                        if predict not in segment and predict != 0:
+                            segment[predict] = 1
+                        elif predict != 0:
+                            segment[predict] += 1
+                    action_num = 0
+                    for predict in segment:
+                        if segment[predict] > action_num:
+                            action_num = segment[predict]
+                            action = predict
+                    ans.append(action)
+                '''
+  
+                previous = "SIL"
+                for i in range(len(recognition)):
+                    if recognition[i] != previous:
+                        if recognition[i] == "SIL":
+                            break
+                        ans.append(recognition[i])
+                        previous = recognition[i]
+                              '''
+                #f_name = vid.split('/')[-1].split('.')[0]
+                #f_ptr = open(results_dir + "/" + f_name, "w")
+                #f_ptr.write("### Frame level recognition: ###\n")
+                #f_ptr.write(' '.join(recognition))
+                #f_ptr.close()
+        print(len(ans))
+        with open("segment.json", "w") as f:
+
+            json.dump(ans, f)

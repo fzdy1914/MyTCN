@@ -25,7 +25,7 @@ args = parser.parse_args()
 num_stages = 4
 num_layers = 10
 num_f_maps = 64
-features_dim = 2048
+features_dim = 400
 bz = 1
 lr = 0.0005
 num_epochs = 50
@@ -46,7 +46,9 @@ mapping_file = "./data/"+args.dataset+"/mapping.txt"
 
 model_dir = "./models/"+args.dataset+"/split_"+args.split
 results_dir = "./results/"+args.dataset+"/split_"+args.split
- 
+
+segment_file = "test_segment.txt"
+
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 if not os.path.exists(results_dir):
@@ -59,6 +61,14 @@ actions_dict = dict()
 for a in actions:
     actions_dict[a.split()[1]] = int(a.split()[0])
 
+file_ptr = open(segment_file, 'r')
+lines = file_ptr.read().split('\n')[:-1]
+file_ptr.close()
+segments = []
+for line in lines:
+    segment = line.split(' ')
+    segments.append(segment)
+
 num_classes = len(actions_dict)
 
 trainer = Trainer(num_stages, num_layers, num_f_maps, features_dim, num_classes)
@@ -68,4 +78,4 @@ if args.action == "train":
     trainer.train(model_dir, batch_gen, num_epochs=num_epochs, batch_size=bz, learning_rate=lr, device=device)
 
 if args.action == "predict":
-    trainer.predict(model_dir, results_dir, features_path, vid_list_file_tst, num_epochs, actions_dict, device, sample_rate)
+    trainer.predict(model_dir, results_dir, features_path, vid_list_file_tst, num_epochs, actions_dict, device, sample_rate, segments)
