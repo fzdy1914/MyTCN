@@ -6,14 +6,13 @@ import random
 
 
 class BatchGenerator(object):
-    def __init__(self, num_classes, actions_dict, gt_path, features_path, sample_rate):
+    def __init__(self, num_classes, actions_dict, gt_path, features_path):
         self.list_of_examples = list()
         self.index = 0
         self.num_classes = num_classes
         self.actions_dict = actions_dict
         self.gt_path = gt_path
         self.features_path = features_path
-        self.sample_rate = sample_rate
 
     def reset(self):
         self.index = 0
@@ -45,8 +44,8 @@ class BatchGenerator(object):
             classes = np.zeros(min(np.shape(features)[1], len(content)))
             for i in range(len(classes)):
                 classes[i] = self.actions_dict[content[i]]
-            batch_input .append(features[:, ::self.sample_rate])
-            batch_target.append(classes[::self.sample_rate])
+            batch_input .append(features)
+            batch_target.append(classes)
 
         length_of_sequences = map(len, batch_target)
         max_length_of_sequences = max(length_of_sequences)
