@@ -47,9 +47,9 @@ actions_dict = read_mapping_dict(mapping_loc)
 if not os.path.exists(model_folder):
     os.makedirs(model_folder)
 
-num_classes = len(actions_dict)
+output_feature_dim = len(actions_dict)
 
-trainer = Trainer(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, num_classes)
+trainer = Trainer(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
 if args.action == "train":
     data_breakfast, labels_breakfast = load_one_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
     data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast)

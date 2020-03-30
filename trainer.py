@@ -4,12 +4,12 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 
-from model import MultiStageModel
+from model import MultiStageTCN
 
 
 class Trainer:
     def __init__(self, num_blocks, num_layers, num_f_maps, dim, num_classes):
-        self.model = MultiStageModel(num_blocks, num_layers, num_f_maps, dim, num_classes)
+        self.model = MultiStageTCN(num_blocks, num_layers, num_f_maps, dim, num_classes)
         self.ce = nn.CrossEntropyLoss(ignore_index=-100)
         self.mse = nn.MSELoss(reduction='none')
         self.num_classes = num_classes

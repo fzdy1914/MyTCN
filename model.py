@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import copy
 
 
-class MultiStageModel(nn.Module):
-    def __init__(self, num_stages, num_layers, num_f_maps, dim, num_classes):
-        super(MultiStageModel, self).__init__()
-        self.stage1 = SingleStageModel(num_layers, num_f_maps, dim, num_classes)
-        self.stages = nn.ModuleList([copy.deepcopy(SingleStageModel(num_layers, num_f_maps, num_classes, num_classes)) for s in range(num_stages-1)])
+class MultiStageTCN(nn.Module):
+    def __init__(self, num_stages, num_layers_pre_stage, num_features_per_layer, input_features_dim, output_feature_dim):
+        super(MultiStageTCN, self).__init__()
+        self.stage1 = SingleTCN(num_layers_pre_stage, num_features_per_layer, input_features_dim, output_feature_dim)
+        self.stages = nn.ModuleList([SingleTCN(num_layers_pre_stage, num_features_per_layer, output_feature_dim, output_feature_dim) for s in range(num_stages - 1)])
 
     def forward(self, x, mask):
         out = self.stage1(x, mask)
@@ -19,12 +18,13 @@ class MultiStageModel(nn.Module):
         return outputs
 
 
-class SingleStageModel(nn.Module):
-    def __init__(self, num_layers, num_f_maps, dim, num_classes):
-        super(SingleStageModel, self).__init__()
-        self.conv_1x1 = nn.Conv1d(dim, num_f_maps, 1)
-        self.layers = nn.ModuleList([copy.deepcopy(DilatedResidualLayer(2 ** i, num_f_maps, num_f_maps)) for i in range(num_layers)])
-        self.conv_out = nn.Conv1d(num_f_maps, num_classes, 1)
+class SingleTCN(nn.Module):
+    def __init__(self, num_layers_pre_stage, num_features_per_layer, input_features_dim, output_feature_dim):
+        super(SingleTCN, self).__init__()
+        self.conv_1x1 = nn.Conv1d(input_features_dim, num_features_per_layer, 1)
+        self.layers = nn.ModuleList([DilatedResidualLayer(2 ** i, num_features_per_layer, num_features_per_layer) for i in range(num_layers_pre_stage)])
+
+        self.conv_out = nn.Conv1d(num_features_per_layer, output_feature_dim, 1)
 
     def forward(self, x, mask):
         out = self.conv_1x1(x)
