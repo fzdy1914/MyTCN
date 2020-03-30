@@ -1,13 +1,10 @@
-#!/usr/bin/python2.7
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 import copy
-import numpy as np
 import time
-import json
+
 
 class MultiStageModel(nn.Module):
     def __init__(self, num_stages, num_layers, num_f_maps, dim, num_classes):
@@ -60,7 +57,7 @@ class Trainer:
         self.mse = nn.MSELoss(reduction='none')
         self.num_classes = num_classes
 
-    def train(self, save_dir, batch_gen, num_epochs, batch_size, learning_rate, device):
+    def train(self, save_dir, data_loader, num_epochs, batch_size, learning_rate, device):
         self.model.train()
         self.model.to(device)
         # self.model.load_state_dict(torch.load(save_dir + "/epoch-20.model"))
@@ -74,13 +71,13 @@ class Trainer:
             total = 0
             number = 0
 
-            while batch_gen.has_next():
+            while data_loader.has_next():
                 number += 1
                 if number % 10 == 0:
                     print(number)
                     print("--- %s seconds ---" % (time.time() - start_time))
                     print("loss = %f,   acc = %f" % (epoch_loss / number, float(correct)/total))
-                batch_input, batch_target, mask = batch_gen.next_batch(batch_size)
+                batch_input, batch_target, mask = data_loader.next_batch(batch_size)
                 batch_input, batch_target, mask = batch_input.to(device), batch_target.to(device), mask.to(device)
                 optimizer.zero_grad()
                 predictions = self.model(batch_input, mask)
@@ -98,33 +95,26 @@ class Trainer:
                 correct += ((predicted == batch_target).float()*mask[:, 0, :].squeeze(1)).sum().item()
                 total += torch.sum(mask[:, 0, :]).item()
 
-            batch_gen.reset()
+            data_loader.reset()
             torch.save(self.model.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".model")
             torch.save(optimizer.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".opt")
-            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 1, epoch_loss / len(batch_gen.list_of_examples),
+            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 1, epoch_loss / len(data_loader.list_of_examples),
                                                                float(correct)/total))
 
-    def predict(self, model_dir, features_path, vid_list_file, epoch, device, segments):
+    def predict(self, model_dir, data_breakfast, epoch, device, segments):
         self.model.eval()
         ans = []
         number = -1
         with torch.no_grad():
             self.model.to(device)
             self.model.load_state_dict(torch.load(model_dir + "/epoch-" + str(epoch) + ".model"))
-            file_ptr = open(vid_list_file, 'r')
-            list_of_vids = file_ptr.read().split('\n')[:-1]
-            file_ptr.close()
 
-            for vid in list_of_vids:
+            for data in data_breakfast:
                 number += 1
-                vid = vid.split('/')[-1]
-                print(vid)
-                features = np.loadtxt(features_path + vid.split('.')[0] + '.gz')
-                features = np.transpose(features, (1, 0))
-                input_x = torch.tensor(features, dtype=torch.float)
-                input_x.unsqueeze_(0)
-                input_x = input_x.to(device)
-                predictions = self.model(input_x, torch.ones(input_x.size(), device=device))
+                data = data.transpose(1, 0).float()
+                data.unsqueeze_(0)
+                data = data.to(device)
+                predictions = self.model(data, torch.ones(data.size(), device=device))
                 _, predicted = torch.max(predictions[-1].data, 1)
                 predicted = predicted.squeeze()
 
@@ -146,6 +136,8 @@ class Trainer:
                     ans.append(action)
 
         print(len(ans))
-        with open("segment.json", "w") as f:
+        with open("ans_3.csv", "w") as f:
+            f.write("Id,Category\n")
 
-            json.dump(ans, f)
+            for i in range(len(ans)):
+                f.write(str(i) + "," + str(ans[i]) + "\n")
