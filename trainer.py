@@ -28,13 +28,13 @@ class Trainer:
             total = 0
             number = 0
 
-            while data_loader.has_next():
+            while data_loader.has_next_test():
                 number += 1
                 if number % 10 == 0:
                     print(number)
                     print("--- %s seconds ---" % (time.time() - start_time))
                     print("loss = %f,   acc = %f" % (epoch_loss / number, float(correct)/total))
-                batch_input, batch_target, mask = data_loader.next_batch(batch_size)
+                batch_input, batch_target, mask = data_loader.next_test_batch(batch_size)
                 batch_input, batch_target, mask = batch_input.to(device), batch_target.to(device), mask.to(device)
                 optimizer.zero_grad()
                 predictions = self.model(batch_input, mask)
@@ -55,7 +55,7 @@ class Trainer:
             data_loader.reset()
             torch.save(self.model.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".model")
             torch.save(optimizer.state_dict(), save_dir + "/epoch-" + str(epoch + 1) + ".opt")
-            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 1, epoch_loss / len(data_loader.list_of_examples),
+            print("[epoch %d]: epoch loss = %f,   acc = %f" % (epoch + 1, epoch_loss / len(data_loader.test_list),
                                                                float(correct)/total))
 
     def predict(self, model_dir, data_breakfast, epoch, device, segments):

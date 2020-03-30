@@ -51,7 +51,7 @@ output_feature_dim = len(actions_dict)
 
 trainer = Trainer(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
 if args.action == "train":
-    data_breakfast, labels_breakfast = load_one_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
+    data_breakfast, labels_breakfast = load_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
     data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast)
     trainer.train(model_folder, data_loader, num_epochs=num_epochs, batch_size=batch_size, learning_rate=lr, device=device)
 

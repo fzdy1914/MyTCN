@@ -5,7 +5,12 @@ import random
 
 class MyDataLoader(object):
     def __init__(self, actions_dict, data_breakfast, labels_breakfast):
-        self.list_of_examples = list(range(len(data_breakfast)))
+        list_of_examples = list(range(len(data_breakfast)))
+        random.shuffle(list_of_examples)
+
+        self.test_list = list_of_examples[:int(0.9 * len(list_of_examples))]
+        self.validation_list = list_of_examples[int(0.9 * len(list_of_examples)):]
+
         self.current_index = 0
         self.num_classes = len(actions_dict)
         self.actions_dict = actions_dict
@@ -15,15 +20,15 @@ class MyDataLoader(object):
 
     def reset(self):
         self.current_index = 0
-        random.shuffle(self.list_of_examples)
+        random.shuffle(self.test_list)
 
-    def has_next(self):
-        if self.current_index < len(self.list_of_examples):
+    def has_next_test(self):
+        if self.current_index < len(self.test_list):
             return True
         return False
 
-    def next_batch(self, batch_size):
-        batch_indexes = self.list_of_examples[self.current_index:self.current_index + batch_size]
+    def next_test_batch(self, batch_size):
+        batch_indexes = self.test_list[self.current_index:self.current_index + batch_size]
         self.current_index += batch_size
 
         batch_input = []
