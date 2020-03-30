@@ -136,7 +136,7 @@ class Trainer:
                     ans.append(action)
 
         print(len(ans))
-        with open("ans_3.csv", "w") as f:
+        with open("ans_5.csv", "w") as f:
             f.write("Id,Category\n")
 
             for i in range(len(ans)):

@@ -5,7 +5,7 @@ import os
 import argparse
 import random
 
-from read_datasetBreakfast import read_mapping_dict, load_one_data, load_test_segments
+from read_datasetBreakfast import read_mapping_dict, load_one_data, load_test_segments, load_data
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 seed = 5242
@@ -27,9 +27,6 @@ batch_size = 1
 lr = 0.0005
 num_epochs = 50
 
-vid_list_file_tst = "./splits/test.split1.bundle"
-features_path = "./data/"
-
 COMP_PATH = ''
 
 ''' 
@@ -50,8 +47,6 @@ actions_dict = read_mapping_dict(mapping_loc)
 if not os.path.exists(model_folder):
     os.makedirs(model_folder)
 
-
-
 num_classes = len(actions_dict)
 
 trainer = Trainer(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, num_classes)
@@ -61,6 +56,6 @@ if args.action == "train":
     trainer.train(model_folder, data_loader, num_epochs=num_epochs, batch_size=batch_size, learning_rate=lr, device=device)
 
 if args.action == "predict":
-    data_breakfast = load_one_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
+    data_breakfast = load_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
     segments = load_test_segments(test_segment_loc)
     trainer.predict(model_folder, data_breakfast, num_epochs, device, segments)
