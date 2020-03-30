@@ -1,5 +1,5 @@
 import torch
-from model import Trainer
+from trainer import Trainer
 from my_data_loader import MyDataLoader
 import os
 import argparse
