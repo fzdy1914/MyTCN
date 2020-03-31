@@ -13,6 +13,7 @@ class MyDataLoader(object):
         self.validation_list = list_of_examples[self.test_list_len:]
 
         self.current_index = 0
+        self.current_validation_index = 0
         self.num_classes = len(actions_dict)
         self.actions_dict = actions_dict
 
@@ -21,6 +22,7 @@ class MyDataLoader(object):
 
     def reset(self):
         self.current_index = 0
+        self.current_validation_index = 0
         random.shuffle(self.test_list)
 
     def has_next_test(self):
@@ -50,3 +52,17 @@ class MyDataLoader(object):
             mask[i, :, :np.shape(batch_target[i])[0]] = torch.ones(self.num_classes, np.shape(batch_target[i])[0])
 
         return batch_input_tensor, batch_target_tensor, mask
+
+    def has_next_validation(self):
+        if self.current_validation_index < len(self.validation_list):
+            return True
+        return False
+
+    def next_validation(self):
+        index = self.validation_list[self.current_validation_index]
+        self.current_validation_index += 1
+
+        batch_input = self.data_breakfast[index].transpose(1, 0).unsqueeze(0)
+        batch_target = self.labels_breakfast[index].unsqueeze(0)
+        mask = torch.ones(batch_input.shape[0], self.num_classes, batch_input.shape[2], dtype=torch.float)
+        return batch_input, batch_target, mask

@@ -47,7 +47,9 @@ num_features_per_layer = 52
 input_features_dim = 400
 batch_size = 1
 lr = 0.0005
-num_epochs = 50
+training_epochs = 50
+start_epoch = 0
+predict_epoch = 50
 
 model = MultiStageTCN(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
 ce = nn.CrossEntropyLoss(ignore_index=-100)
@@ -57,11 +59,12 @@ mse = nn.MSELoss(reduction='none')
 def train():
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    # self.model.load_state_dict(torch.load(model_folder + "/epoch-50.model"))
-    # optimizer.load_state_dict(torch.load(model_folder + "/epoch-50.opt"))
+    if start_epoch != 0:
+        model.load_state_dict(torch.load(model_folder + "/epoch-%d.model" % start_epoch))
+        optimizer.load_state_dict(torch.load(model_folder + "/epoch-%d.opt" % start_epoch))
     start_time = time.time()
     f = open('./record.txt', 'a')
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch + 1, training_epochs + start_epoch + 1):
         model.train()
         epoch_loss, correct, total, batch_num = 0, 0, 0, 0
 
@@ -88,12 +91,41 @@ def train():
             correct += ((predicted == batch_target).float() * mask[:, 0, :].squeeze(1)).sum().item()
             total += torch.sum(mask[:, 0, :]).item()
 
+        torch.save(model.state_dict(), model_folder + "epoch-" + str(epoch) + ".model")
+        torch.save(optimizer.state_dict(), model_folder + "epoch-" + str(epoch) + ".opt")
+
+        validation_loss, validation_acc = validate()
+        info = "[epoch %d]: train_loss = %f, train_acc = %f, validation_loss = %f, validation_acc = %f" \
+               % (epoch, epoch_loss / data_loader.test_list_len, correct / total, validation_loss, validation_acc)
+
         data_loader.reset()
-        torch.save(model.state_dict(), model_folder + "epoch-" + str(epoch + 1) + ".model")
-        torch.save(optimizer.state_dict(), model_folder + "epoch-" + str(epoch + 1) + ".opt")
-        info = "[epoch %d]: loss = %f, acc = %f" % (epoch + 1, epoch_loss / data_loader.test_list_len, correct / total)
         print(info)
         f.write(info)
+
+
+def validate():
+    model.eval()
+    epoch_loss, correct, total, batch_num = 0, 0, 0, 0
+    while data_loader.has_next_validation():
+        with torch.no_grad():
+            batch_input, batch_target, mask = data_loader.next_validation()
+            batch_input, batch_target, mask = batch_input.float().to(device), batch_target.float().to(device), mask.float().to(device)
+            predictions = model(batch_input, mask)
+
+            loss = 0
+            for p in predictions:
+                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim), batch_target.long().view(-1))
+                loss += 0.15 * torch.mean(
+                    torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)),
+                                min=0, max=16) * mask[:, :, 1:])
+
+            epoch_loss += loss.item()
+
+            _, predicted = torch.max(predictions[-1].data, 1)
+            correct += ((predicted == batch_target).float() * mask[:, 0, :].squeeze(1)).sum().item()
+            total += torch.sum(mask[:, 0, :]).item()
+
+    return epoch_loss / len(data_loader.validation_list), correct / total
 
 
 def predict():
@@ -102,7 +134,7 @@ def predict():
     number = -1
     with torch.no_grad():
         model.to(device)
-        model.load_state_dict(torch.load(model_folder + "epoch-" + str(num_epochs) + ".model"))
+        model.load_state_dict(torch.load(model_folder + "epoch-%d.model" % predict_epoch))
 
         for data in data_breakfast:
             number += 1
@@ -140,11 +172,11 @@ def predict():
 
 
 if args.action == "train":
-    data_breakfast, labels_breakfast = load_one_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
+    data_breakfast, labels_breakfast = load_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
     data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast)
     train()
 
 if args.action == "predict":
-    data_breakfast = load_one_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
+    data_breakfast = load_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
     segments = load_test_segments(test_segment_loc)
     predict()
