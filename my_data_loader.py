@@ -4,11 +4,11 @@ import random
 
 
 class MyDataLoader(object):
-    def __init__(self, actions_dict, data_breakfast, labels_breakfast):
+    def __init__(self, actions_dict, data_breakfast, labels_breakfast, test_ratio):
         list_of_examples = list(range(len(data_breakfast)))
         random.shuffle(list_of_examples)
 
-        self.test_list_len = int(0.9 * len(list_of_examples))
+        self.test_list_len = int(test_ratio * len(list_of_examples))
         self.test_list = list_of_examples[:self.test_list_len]
         self.validation_list = list_of_examples[self.test_list_len:]
 

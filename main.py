@@ -50,6 +50,8 @@ lr = 0.0005
 training_epochs = 50
 start_epoch = 0
 predict_epoch = 50
+test_ratio = 0.9
+MSE_loss_factor = 0.15
 
 model = MultiStageTCN(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
 ce = nn.CrossEntropyLoss(ignore_index=-100)
@@ -81,7 +83,7 @@ def train():
             loss = 0
             for p in predictions:
                 loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim ), batch_target.view(-1))
-                loss += 0.15 * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
+                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
 
             epoch_loss += loss.item()
             loss.backward()
@@ -115,9 +117,7 @@ def validate():
             loss = 0
             for p in predictions:
                 loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim), batch_target.long().view(-1))
-                loss += 0.15 * torch.mean(
-                    torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)),
-                                min=0, max=16) * mask[:, :, 1:])
+                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
 
             epoch_loss += loss.item()
 
@@ -173,7 +173,7 @@ def predict():
 
 if args.action == "train":
     data_breakfast, labels_breakfast = load_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
-    data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast)
+    data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast, test_ratio)
     train()
 
 if args.action == "predict":
