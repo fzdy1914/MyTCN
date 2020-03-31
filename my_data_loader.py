@@ -34,24 +34,25 @@ class MyDataLoader(object):
         batch_indexes = self.test_list[self.current_index:self.current_index + batch_size]
         self.current_index += batch_size
 
-        batch_input = []
-        batch_target = []
+        batch_inputs_list = []
+        batch_target_list = []
         for index in batch_indexes:
-            batch_input.append(self.data_breakfast[index].transpose(1, 0))
-            batch_target.append(self.labels_breakfast[index])
+            batch_inputs_list.append(self.data_breakfast[index].transpose(1, 0))
+            batch_target_list.append(self.labels_breakfast[index])
 
-        length_of_sequences = map(len, batch_target)
-        max_length_of_sequences = max(length_of_sequences)
+        max_length_of_sequences = max(map(len, batch_target_list))
 
-        batch_input_tensor = torch.zeros(len(batch_input), np.shape(batch_input[0])[0], max_length_of_sequences, dtype=torch.float)
-        batch_target_tensor = torch.ones(len(batch_input), max_length_of_sequences, dtype=torch.long)*(-100)
-        mask = torch.zeros(len(batch_input), self.num_classes, max_length_of_sequences, dtype=torch.float)
-        for i in range(len(batch_input)):
-            batch_input_tensor[i, :, :np.shape(batch_input[i])[1]] = batch_input[i]
-            batch_target_tensor[i, :np.shape(batch_target[i])[0]] = batch_target[i]
-            mask[i, :, :np.shape(batch_target[i])[0]] = torch.ones(self.num_classes, np.shape(batch_target[i])[0])
+        batch_inputs_tensor = torch.zeros(len(batch_inputs_list), batch_inputs_list[0].shape[0], max_length_of_sequences, dtype=torch.float)
+        batch_targets_tensor = torch.ones(len(batch_inputs_list), max_length_of_sequences, dtype=torch.long) * (-100)
+        mask = torch.zeros(batch_inputs_tensor.shape, dtype=torch.float)
+        for i in range(len(batch_inputs_list)):
+            batch_inputs_tensor[i, :, :batch_inputs_list[i].shape[1]] = batch_inputs_list[i]
+            batch_targets_tensor[i, :batch_target_list[i].shape[0]] = batch_target_list[i]
+            mask[i, :, :np.shape(batch_target_list[i])[0]] = torch.ones(batch_inputs_list[i].shape)
 
-        return batch_input_tensor, batch_target_tensor, mask
+        batch_inputs_tensor_with_mask = torch.stack([batch_inputs_tensor, mask], dim=0)
+
+        return batch_inputs_tensor_with_mask, batch_targets_tensor
 
     def has_next_validation(self):
         if self.current_validation_index < len(self.validation_list):
@@ -62,7 +63,9 @@ class MyDataLoader(object):
         index = self.validation_list[self.current_validation_index]
         self.current_validation_index += 1
 
-        batch_input = self.data_breakfast[index].transpose(1, 0).unsqueeze(0)
-        batch_target = self.labels_breakfast[index].unsqueeze(0)
-        mask = torch.ones(batch_input.shape[0], self.num_classes, batch_input.shape[2], dtype=torch.float)
-        return batch_input, batch_target, mask
+        inputs = self.data_breakfast[index].transpose(1, 0).unsqueeze(0).float()
+        targets = self.labels_breakfast[index].unsqueeze(0)
+        mask = torch.ones(inputs.shape, dtype=torch.float)
+
+        inputs_with_mask = torch.stack([inputs, mask], dim=0)
+        return inputs_with_mask, targets

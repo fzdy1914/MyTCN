@@ -32,7 +32,8 @@ DATA_folder = os.path.join(COMP_PATH, 'data/') #Frame I3D features for all video
 mapping_loc = os.path.join(COMP_PATH, 'splits/mapping_bf.txt')
 model_folder = os.path.join(COMP_PATH, './models/')
 test_segment_loc = os.path.join(COMP_PATH, './test_segment.txt')
-predict_result_loc = os.path.join(COMP_PATH, './ans_7.csv')
+predict_result_loc = os.path.join(COMP_PATH, './ans.csv')
+record_file_loc = os.path.join(COMP_PATH, './record.txt')
 
 actions_dict = read_mapping_dict(mapping_loc)
 
@@ -65,25 +66,25 @@ def train():
         model.load_state_dict(torch.load(model_folder + "/epoch-%d.model" % start_epoch))
         optimizer.load_state_dict(torch.load(model_folder + "/epoch-%d.opt" % start_epoch))
     start_time = time.time()
-    f = open('./record.txt', 'a')
+    f = open(record_file_loc, 'a')
     for epoch in range(start_epoch + 1, training_epochs + start_epoch + 1):
         model.train()
         epoch_loss, correct, total, batch_num = 0, 0, 0, 0
 
         while data_loader.has_next_test():
             batch_num += 1
-            if batch_num % 20 == 0:
+            if batch_num % 10 == 0:
                 print("--- %s seconds ---" % (time.time() - start_time))
                 print("batch_number = %d, loss = %f, acc = %f" % (batch_num, epoch_loss / batch_num, correct / total))
-            batch_input, batch_target, mask = data_loader.next_test_batch(batch_size)
-            batch_input, batch_target, mask = batch_input.to(device), batch_target.to(device), mask.to(device)
+            batch_inputs_tensor_with_mask, batch_target = data_loader.next_test_batch(batch_size)
+            batch_inputs_tensor_with_mask, batch_target = batch_inputs_tensor_with_mask.to(device), batch_target.to(device)
             optimizer.zero_grad()
-            predictions = model(batch_input, mask)
+            predictions, mask = model(batch_inputs_tensor_with_mask)
 
             loss = 0
             for p in predictions:
-                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim ), batch_target.view(-1))
-                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
+                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim), batch_target.view(-1))
+                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, 0:output_feature_dim, 1:])
 
             epoch_loss += loss.item()
             loss.backward()
@@ -103,6 +104,9 @@ def train():
         data_loader.reset()
         print(info)
         f.write(info)
+        f.write("\n")
+        f.flush()
+    f.close()
 
 
 def validate():
@@ -110,19 +114,19 @@ def validate():
     epoch_loss, correct, total, batch_num = 0, 0, 0, 0
     while data_loader.has_next_validation():
         with torch.no_grad():
-            batch_input, batch_target, mask = data_loader.next_validation()
-            batch_input, batch_target, mask = batch_input.float().to(device), batch_target.float().to(device), mask.float().to(device)
-            predictions = model(batch_input, mask)
+            inputs_with_mask, targets = data_loader.next_validation()
+            inputs_with_mask, targets = inputs_with_mask.float().to(device), targets.long().to(device)
+            predictions, mask = model(inputs_with_mask)
 
             loss = 0
             for p in predictions:
-                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim), batch_target.long().view(-1))
-                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
+                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim), targets.view(-1))
+                loss += MSE_loss_factor * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :output_feature_dim, 1:])
 
             epoch_loss += loss.item()
 
             _, predicted = torch.max(predictions[-1].data, 1)
-            correct += ((predicted == batch_target).float() * mask[:, 0, :].squeeze(1)).sum().item()
+            correct += ((predicted == targets).float() * mask[:, 0, :].squeeze(1)).sum().item()
             total += torch.sum(mask[:, 0, :]).item()
 
     return epoch_loss / len(data_loader.validation_list), correct / total
@@ -140,8 +144,9 @@ def predict():
             number += 1
             data = data.transpose(1, 0).float()
             data.unsqueeze_(0)
+            data = torch.stack([data, torch.ones(data.shape)], dim=0)
             data = data.to(device)
-            predictions = model(data, torch.ones(data.size(), device=device))
+            predictions, mask = model(data)
             _, predicted = torch.max(predictions[-1].data, 1)
             predicted = predicted.squeeze()
 
@@ -156,7 +161,7 @@ def predict():
                     elif prediction != 0:
                         segment[prediction] += 1
                 action_num = 0
-                action = None
+                action = 0
                 for prediction in segment:
                     if segment[prediction] > action_num:
                         action_num = segment[prediction]
