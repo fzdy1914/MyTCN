@@ -10,7 +10,7 @@ def _isArrayLike(obj):
 
 def load_one_data(split_load, actions_dict, GT_folder, DATA_folder, datatype='training'):
     file_ptr = open(split_load, 'r')
-    content_all = file_ptr.read().split('\n')[1:-1][0:25]
+    content_all = file_ptr.read().split('\n')[1:-1][0:20]
     content_all = [x.strip('./data/groundTruth/') + 't' for x in content_all]
 
     if datatype == 'training':

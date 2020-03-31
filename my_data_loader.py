@@ -8,8 +8,9 @@ class MyDataLoader(object):
         list_of_examples = list(range(len(data_breakfast)))
         random.shuffle(list_of_examples)
 
-        self.test_list = list_of_examples[:int(0.9 * len(list_of_examples))]
-        self.validation_list = list_of_examples[int(0.9 * len(list_of_examples)):]
+        self.test_list_len = int(0.9 * len(list_of_examples))
+        self.test_list = list_of_examples[:self.test_list_len]
+        self.validation_list = list_of_examples[self.test_list_len:]
 
         self.current_index = 0
         self.num_classes = len(actions_dict)

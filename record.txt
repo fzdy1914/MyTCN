@@ -1,0 +1,9 @@
+[epoch 1]: epoch loss = 18.542651,   acc = 0.115036
+[epoch 2]: epoch loss = 14.630908,   acc = 0.220196
+[epoch 3]: epoch loss = 12.467444,   acc = 0.151459
+[epoch 4]: epoch loss = 11.318943,   acc = 0.206357
+[epoch 5]: epoch loss = 10.323888,   acc = 0.272976
+[epoch 1]: epoch loss = 18.542651,   acc = 0.115036
+[epoch 2]: epoch loss = 14.630908,   acc = 0.220196
+[epoch 3]: epoch loss = 12.467444,   acc = 0.151459
+[epoch 1]: loss = 18.542651, acc = 0.115036[epoch 2]: loss = 14.630908, acc = 0.220196

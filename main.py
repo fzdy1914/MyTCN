@@ -1,5 +1,10 @@
+import time
+
 import torch
-from trainer import Trainer
+from torch import nn, optim
+import torch.nn.functional as F
+
+from model import MultiStageTCN
 from my_data_loader import MyDataLoader
 import os
 import argparse
@@ -16,31 +21,18 @@ torch.backends.cudnn.deterministic = True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--action', default='train')
-
 args = parser.parse_args()
-
-num_stages = 4
-num_layers_per_stage = 10
-num_features_per_layer = 64
-input_features_dim = 400
-batch_size = 1
-lr = 0.0005
-num_epochs = 50
 
 COMP_PATH = ''
 
-''' 
-training to load train set
-test to load test set
-'''
 train_split = os.path.join(COMP_PATH, 'splits/train.split1.bundle') #Train Split
 test_split = os.path.join(COMP_PATH, 'splits/test.split1.bundle') #Test Split
 GT_folder = os.path.join(COMP_PATH, 'groundTruth/') #Ground Truth Labels for each training video
 DATA_folder = os.path.join(COMP_PATH, 'data/') #Frame I3D features for all videos
 mapping_loc = os.path.join(COMP_PATH, 'splits/mapping_bf.txt')
-
 model_folder = os.path.join(COMP_PATH, './models/')
 test_segment_loc = os.path.join(COMP_PATH, './test_segment.txt')
+predict_result_loc = os.path.join(COMP_PATH, './ans_7.csv')
 
 actions_dict = read_mapping_dict(mapping_loc)
 
@@ -49,13 +41,110 @@ if not os.path.exists(model_folder):
 
 output_feature_dim = len(actions_dict)
 
-trainer = Trainer(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
+num_stages = 4
+num_layers_per_stage = 12
+num_features_per_layer = 52
+input_features_dim = 400
+batch_size = 1
+lr = 0.0005
+num_epochs = 50
+
+model = MultiStageTCN(num_stages, num_layers_per_stage, num_features_per_layer, input_features_dim, output_feature_dim)
+ce = nn.CrossEntropyLoss(ignore_index=-100)
+mse = nn.MSELoss(reduction='none')
+
+
+def train():
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    # self.model.load_state_dict(torch.load(model_folder + "/epoch-50.model"))
+    # optimizer.load_state_dict(torch.load(model_folder + "/epoch-50.opt"))
+    start_time = time.time()
+    f = open('./record.txt', 'a')
+    for epoch in range(num_epochs):
+        model.train()
+        epoch_loss, correct, total, batch_num = 0, 0, 0, 0
+
+        while data_loader.has_next_test():
+            batch_num += 1
+            if batch_num % 20 == 0:
+                print("--- %s seconds ---" % (time.time() - start_time))
+                print("batch_number = %d, loss = %f, acc = %f" % (batch_num, epoch_loss / batch_num, correct / total))
+            batch_input, batch_target, mask = data_loader.next_test_batch(batch_size)
+            batch_input, batch_target, mask = batch_input.to(device), batch_target.to(device), mask.to(device)
+            optimizer.zero_grad()
+            predictions = model(batch_input, mask)
+
+            loss = 0
+            for p in predictions:
+                loss += ce(p.transpose(2, 1).contiguous().view(-1, output_feature_dim ), batch_target.view(-1))
+                loss += 0.15 * torch.mean(torch.clamp(mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16) * mask[:, :, 1:])
+
+            epoch_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+
+            _, predicted = torch.max(predictions[-1].data, 1)
+            correct += ((predicted == batch_target).float() * mask[:, 0, :].squeeze(1)).sum().item()
+            total += torch.sum(mask[:, 0, :]).item()
+
+        data_loader.reset()
+        torch.save(model.state_dict(), model_folder + "epoch-" + str(epoch + 1) + ".model")
+        torch.save(optimizer.state_dict(), model_folder + "epoch-" + str(epoch + 1) + ".opt")
+        info = "[epoch %d]: loss = %f, acc = %f" % (epoch + 1, epoch_loss / data_loader.test_list_len, correct / total)
+        print(info)
+        f.write(info)
+
+
+def predict():
+    model.eval()
+    ans = []
+    number = -1
+    with torch.no_grad():
+        model.to(device)
+        model.load_state_dict(torch.load(model_folder + "epoch-" + str(num_epochs) + ".model"))
+
+        for data in data_breakfast:
+            number += 1
+            data = data.transpose(1, 0).float()
+            data.unsqueeze_(0)
+            data = data.to(device)
+            predictions = model(data, torch.ones(data.size(), device=device))
+            _, predicted = torch.max(predictions[-1].data, 1)
+            predicted = predicted.squeeze()
+
+            for i in range(len(segments[number]) - 1):
+                start = int(segments[number][i])
+                end = int(segments[number][i+1])
+                segment = {}
+                for j in range(start, end):
+                    prediction = predicted[j].item()
+                    if prediction not in segment and prediction != 0:
+                        segment[prediction] = 1
+                    elif prediction != 0:
+                        segment[prediction] += 1
+                action_num = 0
+                action = None
+                for prediction in segment:
+                    if segment[prediction] > action_num:
+                        action_num = segment[prediction]
+                        action = prediction
+                ans.append(action)
+
+    print("Total Segment： %d" % len(ans))
+    with open(predict_result_loc, "w") as f:
+        f.write("Id,Category\n")
+
+        for i in range(len(ans)):
+            f.write(str(i) + "," + str(ans[i]) + "\n")
+
+
 if args.action == "train":
-    data_breakfast, labels_breakfast = load_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
+    data_breakfast, labels_breakfast = load_one_data(train_split, actions_dict, GT_folder, DATA_folder, datatype='training')
     data_loader = MyDataLoader(actions_dict, data_breakfast, labels_breakfast)
-    trainer.train(model_folder, data_loader, num_epochs=num_epochs, batch_size=batch_size, learning_rate=lr, device=device)
+    train()
 
 if args.action == "predict":
-    data_breakfast = load_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
+    data_breakfast = load_one_data(test_split, actions_dict, GT_folder, DATA_folder, datatype='test')
     segments = load_test_segments(test_segment_loc)
-    trainer.predict(model_folder, data_breakfast, num_epochs, device, segments)
+    predict()

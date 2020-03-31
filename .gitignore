@@ -1,6 +1,4 @@
 data/
-models/
 venv/
 .idea/
 __pycache__/
-results/
