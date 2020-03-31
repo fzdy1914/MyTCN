@@ -21,16 +21,20 @@ class MultiStageTCN(nn.Module):
 class SingleTCN(nn.Module):
     def __init__(self, num_layers_pre_stage, num_features_per_layer, input_features_dim, output_feature_dim):
         super(SingleTCN, self).__init__()
+        self.num_features_per_layer = num_features_per_layer
         self.conv_1x1 = nn.Conv1d(input_features_dim, num_features_per_layer, 1)
         self.layers = nn.ModuleList([DilatedResidualLayer(2 ** i, num_features_per_layer, num_features_per_layer) for i in range(num_layers_pre_stage)])
-
         self.conv_out = nn.Conv1d(num_features_per_layer, output_feature_dim, 1)
 
     def forward(self, x, mask):
         out = self.conv_1x1(x)
+        new_mask = torch.stack([mask[:, 0, :]] * self.num_features_per_layer, dim=1)
+        out = torch.stack([out, new_mask], dim=0)
+
         for layer in self.layers:
-            out = layer(out, mask)
-        out = self.conv_out(out) * mask[:, 0:1, :]
+            out = layer(out)
+        out = self.conv_out(out[0]) * mask
+
         return out
 
 
@@ -38,11 +42,16 @@ class DilatedResidualLayer(nn.Module):
     def __init__(self, dilation, in_channels, out_channels):
         super(DilatedResidualLayer, self).__init__()
         self.conv_dilated = nn.Conv1d(in_channels, out_channels, 3, padding=dilation, dilation=dilation)
+        self.relu = nn.ReLU()
         self.conv_1x1 = nn.Conv1d(out_channels, out_channels, 1)
         self.dropout = nn.Dropout()
 
-    def forward(self, x, mask):
-        out = F.relu(self.conv_dilated(x))
+    def forward(self, x):
+        x, mask = x
+        out = self.conv_dilated(x)
+        out = self.relu(out)
         out = self.conv_1x1(out)
         out = self.dropout(out)
-        return (x + out) * mask[:, 0:1, :]
+        out = (x + out) * mask[:, 0:1, :]
+        out = torch.stack([out, mask], dim=0)
+        return out
